@@ -20,16 +20,16 @@
 ;; Boston, MA 02110-1301, USA.
 
 ;;; Commentary:
-
+;;
 ;; Zsh completion system with Anything interface.
 
 ;;; Installation:
-
+;;
 ;; Put the anything-zsh-screen.el to your load-path.
 ;; Put the anything-zsh-screen.zsh (the helper zsh script file) to the
 ;; location poited by `anything-zsh-screen-script-file-name'.
 ;; (defualt: ~/.emacs.d)
-
+;;
 ;; Start a screen session named by `anything-zsh-screen-session-name' and
 ;; within that session, run the start up commands.
 ;; Like below.
@@ -37,22 +37,26 @@
 ;; % source ~/.emacs.d/anything-zsh-screen.zsh
 ;; % anything-zsh-screen-rc
 ;; (You can now detach this screen session.)
-
+;;
 ;; And the following to your ~/.emacs startup file.
 ;; (eval-after-load
 ;;  'shell
 ;;  '(define-key shell-mode-map "\e\t" 'anything-zsh-screen-simple-complete))
 
 ;;; Note:
-
+;;
 ;; This package requires several working executables listed below,
-;; Perl, ruby1.9, zsh and screen.
+;; Zsh and screen.
 
 ;;; Code:
 
 (require 'anything)
 (require 'comint)
 (require 'term)
+
+(when (require 'anything-show-completion nil t)
+  (use-anything-show-completion 'anything-zsh-screen-complete
+                                '(anything-zsh-screen-get-prefix-length)))
 
 (defvar anything-zsh-screen-script-file-name
   (expand-file-name "~/.emacs.d/anything-zsh-screen.zsh")
@@ -73,10 +77,11 @@ this `anything-zsh-screen' distribution) to this location.")
   "command line"
   "Name of the anything-source which is supposed to be displayed at the zle.")
 
-(define-anything-type-attribute 'anything-zsh-screen-read
+(define-anything-type-attribute 'anything-zsh-screen
   '((display-to-real . azs-display-to-real)
-    (action . (("Insert" . azs-insert))))
-  "Anything Zsh Screen Read.")
+    (action . (("Insert" . azs-insert)))
+    (volatile))
+  "Anything Zsh Screen.")
 
 (defun azs-display-to-real (disp)
   (let ((target (thing-at-point 'symbol))
@@ -88,26 +93,30 @@ this `anything-zsh-screen' distribution) to this location.")
           (t disp))))
 
 (defun azs-simple-insert-candidate (cand)
-  (let* ((len (azs-get-prefix-length))
-         (del-len (if (< len 0) 0 len)))
-    (delete-region (- (point) del-len) (point))
-    (insert cand)))
+  (delete-region (- (point) (azs-get-prefix-length)) (point))
+  (insert cand))
 (defun azs-term-insert-candidate (cand)
   (dotimes (_ (azs-get-prefix-length))
     (term-send-backspace))
   (term-send-raw-string cand))
+(defvar anything-zsh-screen-get-insert-func
+  #'(lambda ()
+      (if (eq major-mode 'term-mode)
+        #'azs-term-insert-candidate
+        #'azs-simple-insert-candidate)))
 (defun azs-insert (cand)
   (let ((insert-func (funcall anything-zsh-screen-get-insert-func)))
     (funcall insert-func cand)))
-(defvar anything-zsh-screen-get-insert-func
-  (lambda ()
-    (if (eq major-mode 'term-mode)
-      #'azs-term-insert-candidate
-      #'azs-simple-insert-candidate)))
 
 (defvar anything-zsh-screen-complete-target "")
 (defun azs-get-prefix-length ()
-  (let ((sname (assoc-default 'name (anything-get-current-source))))
+  (let ((target (thing-at-point 'symbol))
+        (sname (assoc-default 'name (anything-get-current-source)))
+        (length1 (lambda (target)
+                   (if (and (string-match "^-" target)
+                            (not (eq (char-before) ?\-)))
+                     0
+                     (length target)))))
     (cond ((string= anything-zsh-screen-zle-line-source-name sname)
            (length anything-zsh-screen-complete-target))
           ((string= "directory stack" sname) 1)
@@ -117,13 +126,23 @@ this `anything-zsh-screen' distribution) to this location.")
              (if (string= "" name-maybe)
                0
                (length name-maybe))))
-          ((null (thing-at-point 'symbol)) 0)
+          ((null target) 0)
           ((string-match "option" sname)
-           (let ((s (thing-at-point 'symbol)))
-             (cond ((string= "-" s) 1)
-                   ((string= "--" s) 2)
-                   (t 0))))
-          (t (length (thing-at-point 'symbol))))))
+           (cond ((string= "-" target) 1)
+                 ((string= "--" target) 2)
+                 (t (funcall length1 target))))
+          (t (funcall length1 target)))))
+
+(defalias 'anything-zsh-screen-get-prefix-length 'azs-get-prefix-length)
+
+(defun* azs-get-sources (arg &optional (chdir default-directory))
+  (anything-aif (azs-get-hardcopy arg chdir)
+      (with-temp-buffer
+        (insert-file-contents-literally it)
+        (azs-process-hardcopy (replace-regexp-in-string "[[:space:]]+$" "" arg)
+                              chdir
+                              anything-zsh-screen-zle-line-source-name
+                              "^>"))))
 
 (defun azs-get-hardcopy (arg chdir)
   (if (zerop
@@ -136,23 +155,80 @@ this `anything-zsh-screen' distribution) to this location.")
                        " " anything-zsh-screen-exchange-file-name
                        " " anything-zsh-screen-session-name
                        " " (number-to-string anything-zsh-screen-scrollback)
-                       " '" arg "' "
-                       " '" anything-zsh-screen-zle-line-source-name "'"
                        " 'stuff \"cd " chdir "^M\"' "
                        " 'stuff \"" arg "^I^X^X\"'"))))
     anything-zsh-screen-exchange-file-name
     (error "Error while communicating with the screen session")))
 
-(defun azs-read-sources (arg &optional chdir)
-  (anything-aif (azs-get-hardcopy arg (or chdir default-directory))
-      (read (with-temp-buffer
-              (insert-file-contents-literally it)
-              (buffer-string)))))
+(defun azs-process-hardcopy (arg chdir zle-line-name start-regexp)
+  (save-excursion
+    (goto-char (point-min))
+    (let* ((beg (re-search-forward start-regexp nil t))
+           (end0 (or (re-search-forward "^$" nil t)
+                     (progn
+                       (goto-char (point-max))
+                       (forward-line)
+                       (point))))
+           (end (progn (goto-char end0)
+                       (insert "* dummy\n")
+                       (point))))
+      (goto-char beg)
+      (forward-line)
+      (azs-current-buffer-reduce
+       #'(lambda (x desc buf cands acc)
+           (cond ((string-match "^>[[:space:]]+\\(.+\\)" x)
+                  (list desc (match-string-no-properties 1 x) cands acc))
+                 ((string-match "^corrections (errors:" x)
+                  (list x buf cands acc))
+                 ((string-match "^\\*[[:space:]]+\\(.+\\)" x)
+                  (let ((desc1 (match-string-no-properties 1 x))
+                        (source (if (null cands)
+                                  nil
+                                  `(((name . ,desc)
+                                     (candidates . ,cands))))))
+                    (if (and (not (string-equal buf ""))
+                             (not (string-equal buf arg)))
+                      (list desc1 "" nil (nconc acc
+                                                `(((name . ,zle-line-name)
+                                                   (candidates . (,buf))))
+                                                source))
+                      (list desc1 buf nil (nconc acc source)))))
+                 ((string-match " -- " x)
+                  (list desc
+                        buf
+                        (nconc
+                         cands
+                         `((,x
+                            . ,(if (string-equal "directory stack" desc)
+                                 (car (last (split-string x " -- ")))
+                                 (car (split-string x "[[:space:]]+"))))))
+                        acc))
+                 (t (if (string-equal desc "")
+                      (list desc (concat buf x) cands acc)
+                      (list desc
+                            buf
+                            (nconc cands 
+                                   (mapcar #'(lambda (x) `(,x . ,x))
+                                           (split-string x "[[:space:]]+")))
+                            acc)))))
+       '("" "" nil nil)
+       #'(lambda (&rest acc) (car (reverse acc)))
+       #'(lambda ()
+           (= end (point)))))))
+
+(defun* azs-current-buffer-reduce (f init &optional (final #'identity) (until #'eobp))
+  (loop until (funcall until)
+        for val = (buffer-substring-no-properties (line-beginning-position)
+                                                  (line-end-position))
+        for acc = (apply f val acc)
+        initially (setq acc init)
+        do (forward-line)
+        finally (return (apply final acc))))
 
 (defun azs-complete (sources target)
   (let ((anything-sources sources)
-        (anything-zsh-screen-complete-target target)
-        (anything-execute-action-at-once-if-one t))
+        (anything-execute-action-at-once-if-one t)
+        (anything-zsh-screen-complete-target target))
     (anything sources
               nil
               "pattern: "
@@ -165,24 +241,23 @@ this `anything-zsh-screen' distribution) to this location.")
   (when (eq major-mode 'term-mode)
     (term-send-raw-string "\C-I")))
 
-(defun anything-zsh-screen-complete (get-target &optional extend-sources)
-  (let ((extend-sources (or extend-sources #'identity))
-        (target (funcall get-target)))
+(defun anything-zsh-screen-extend-sources (sources)
+  (mapcar #'(lambda (x) (append x '((type . anything-zsh-screen))))
+          sources))
+
+(defun* anything-zsh-screen-complete (get-target &optional (extend-sources #'anything-zsh-screen-extend-sources))
+  (let ((target (funcall get-target)))
     (if (azs-want-zsh-expander target)
       (azs-complete-cancel-anything)
-      (azs-complete (funcall extend-sources (azs-read-sources target))
+      (azs-complete (funcall extend-sources (azs-get-sources target))
                     target))))
 
 (defun anything-zsh-screen-simple-complete ()
   (interactive)
-  (anything-zsh-screen-complete (lambda ()
-                                  (buffer-substring-no-properties
-                                   (comint-line-beginning-position)
-                                   (point)))))
-
-(when (require 'anything-show-completion nil t)
-  (use-anything-show-completion 'anything-zsh-screen-complete
-                                '(azs-get-prefix-length)))
+  (anything-zsh-screen-complete #'(lambda ()
+                                    (buffer-substring-no-properties
+                                     (comint-line-beginning-position)
+                                     (point)))))
 
 (provide 'anything-zsh-screen)
 ;;; anything-zsh-screen.el ends here
