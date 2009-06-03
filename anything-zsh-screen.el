@@ -133,7 +133,14 @@ this `anything-zsh-screen' distribution) to this location.")
                  (t (funcall length1 target))))
           (t (funcall length1 target)))))
 
-(defalias 'anything-zsh-screen-get-prefix-length 'azs-get-prefix-length)
+(defun anything-zsh-screen-get-prefix-length ()
+  (let ((len (azs-get-prefix-length)))
+    (if (not (zerop len))
+      len
+      (prog1 -1
+        (when (eobp)
+          (save-excursion
+            (insert " ")))))))
 
 (defun* azs-get-sources (arg &optional (chdir default-directory))
   (anything-aif (azs-get-hardcopy arg chdir)
