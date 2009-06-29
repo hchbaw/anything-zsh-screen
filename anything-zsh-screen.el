@@ -259,5 +259,71 @@ this `anything-zsh-screen' distribution) to this location.")
                                      (comint-line-beginning-position)
                                      (point)))))
 
+(dont-compile
+  (when (fboundp 'expectations)
+    (expectations
+      (desc "azs-process-hardcopy")
+      (expect '(((name . "desc") (candidates ("--foo" . "--foo"))))
+        (with-temp-buffer
+          (insert (mapconcat
+                   'identity
+                   '("> _"
+                     "> ls -"
+                     "* desc"
+                     "--foo"
+                     "")
+                   "\n"))
+          (azs-process-hardcopy "ls -" "" ">" "^>")))
+      (expect '(((name . "name>") (candidates "foo foo")))
+        (with-temp-buffer
+          (insert (mapconcat
+                   'identity
+                   '("> _"
+                     "> foo foo"
+                     "")
+                   "\n"))
+          (azs-process-hardcopy "ls " "" "name>" "^>")))
+      (expect '(((name . ">")
+                 (candidates "ls abc"))
+                ((name . "corrections (errors: 1)")
+                 (candidates ("abc" . "abc"))))
+        (with-temp-buffer
+          (insert (mapconcat
+                   'identity
+                   '("> _"
+                     "> ls abc"
+                     "* corrections (errors: 1)"
+                     "abc"
+                     "")
+                   "\n"))
+          (azs-process-hardcopy "ls abcd" "" ">" "^>")))
+      (expect '(((name . "directory stack")
+                 (candidates ("1 -- /tmp" . "/tmp")
+                             ("2 -- /tmp/tmp" . "/tmp/tmp"))))
+        (with-temp-buffer
+          (insert (mapconcat
+                   'identity
+                   '("> _"
+                     "> cd -"
+                     "* directory stack"
+                     "1 -- /tmp"
+                     "2 -- /tmp/tmp"
+                     "")
+                   "\n"))
+          (azs-process-hardcopy "cd -" "" ">" "^>")))
+      (expect '(((name . "desc")
+                 (candidates ("--option -- option and desc" . "--option"))))
+        (with-temp-buffer
+          (insert (mapconcat
+                   'identity
+                   '("> _"
+                     "> foo"
+                     "* desc"
+                     "--option -- option and desc"
+                     "")
+                   "\n"))
+          (azs-process-hardcopy "foo" "" ">" "^>")))
+      )))
+
 (provide 'anything-zsh-screen)
 ;;; anything-zsh-screen.el ends here
