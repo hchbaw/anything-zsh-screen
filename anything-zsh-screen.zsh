@@ -19,6 +19,7 @@ function anything-zsh-screen-rc () {
   fi
 
   # formatting and messages
+  zstyle ':completion:*' list-rows-first yes
   zstyle ':completion:*' verbose yes
   zstyle ':completion:*' list-separator '--'
   zstyle ':completion:*' group-name ''
