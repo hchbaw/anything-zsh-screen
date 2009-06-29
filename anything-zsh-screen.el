@@ -113,7 +113,7 @@ this `anything-zsh-screen' distribution) to this location.")
   (let ((target (thing-at-point 'symbol))
         (sname (assoc-default 'name (anything-get-current-source)))
         (length1 (lambda (target)
-                   (if (and (string-match "^-" target)
+                   (if (and (string-match "^-[^-]" target)
                             (not (eq (char-before) ?\-)))
                      0
                      (length target)))))
