@@ -76,6 +76,10 @@ this `anything-zsh-screen' distribution) to this location.")
 (defvar anything-zsh-screen-zle-line-source-name
   "command line"
   "Name of the anything-source which is supposed to be displayed at the zle.")
+(defvar anything-zsh-screen-run-awaits
+  20
+  "Number of the times to be passed as awaiting the screen's
+exchange file generation.")
 
 (define-anything-type-attribute 'anything-zsh-screen
   '((display-to-real . azs-display-to-real)
@@ -155,6 +159,7 @@ this `anything-zsh-screen' distribution) to this location.")
                        " " anything-zsh-screen-exchange-file-name
                        " " anything-zsh-screen-session-name
                        " " (number-to-string anything-zsh-screen-scrollback)
+                       " " (number-to-string anything-zsh-screen-run-awaits)
                        " 'stuff \"cd " chdir "^M\"' "
                        " 'stuff \"" arg "^I^X^X\"'"))))
     anything-zsh-screen-exchange-file-name

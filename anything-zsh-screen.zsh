@@ -18,7 +18,6 @@ function anything-zsh-screen-rc () {
     ANYTHING_ZSH_SCREEN_EXCHANGE=${HOME}/tmp/anything-zsh-screen-exchange
   fi
 
-  # formatting and messages
   zstyle ':completion:*' list-rows-first yes
   zstyle ':completion:*' verbose yes
   zstyle ':completion:*' list-separator '--'
@@ -54,24 +53,26 @@ function anything-zsh-screen-run () {
   local exchange=${1}
   local sessionname=${2}
   local scrollback=${3}
-  shift 3 # treat rest arguments as the screen commands.
+  local awaits=${4}
+  shift 4 # treat rest arguments as the screen commands.
 
   rm -f ${exchange}
   azs-run1 \
     ${sessionname} ${scrollback} \
     ${argv}
 
-  azs-run-await ${exchange}
+  azs-run-await ${exchange} ${awaits}
   return $?
 }
 
 function azs-run-await () {
   local exchange=${1}
+  local awaits=${2-$((20))}
 
   zmodload zsh/stat
   local ret=-1
   local size=-1
-  for _i in {1..20}; do
+  repeat ${awaits} ; do
     if [[ -f ${exchange} ]]; then
       builtin stat -H h ${exchange}
       if (( ${size} == $h[size] )); then
