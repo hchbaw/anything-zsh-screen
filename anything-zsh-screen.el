@@ -269,6 +269,27 @@ exchange file generation.")
                                      (comint-line-beginning-position)
                                      (point)))))
 
+(require 'cl)
+(defun* azs-make-source
+    (arg &optional name (skipp #'(lambda (s)
+                                   (equal
+                                    anything-zsh-screen-zle-line-source-name
+                                    (anything-attr 'name s)))))
+  (let* ((arg (concat (replace-regexp-in-string "[[:space:]]+$" "" arg) " "))
+         (name (or name (concat arg "(zsh screen)")))
+         (anything-source-name name))
+    (with-current-buffer (anything-candidate-buffer 'global)
+      (let ((anything-zsh-screen-run-awaits 99999)
+            (anything-zsh-screen-scrollback 99999))
+        (loop for (_ . x) in
+              (anything-attr 'candidates
+                             (find-if-not skipp
+                                          (azs-get-sources arg)))
+              do (insert x "\n"))))
+    `((name . ,name)
+      (candidates-in-buffer)
+      (action . insert))))
+
 (dont-compile
   (when (fboundp 'expectations)
     (expectations
