@@ -138,7 +138,8 @@ this `anything-zsh-screen' distribution) to this location.")
     (if (not (zerop len))
       len
       (prog1 -1
-        (when (eobp)
+        (when (and (not (eq major-mode 'term-mode))
+                   (eobp))
           (save-excursion
             (insert " ")))))))
 
