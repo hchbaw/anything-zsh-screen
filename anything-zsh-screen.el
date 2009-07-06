@@ -234,10 +234,7 @@ exchange file generation.")
   (let ((anything-sources sources)
         (anything-execute-action-at-once-if-one t)
         (anything-zsh-screen-complete-target target))
-    (anything sources
-              nil
-              "pattern: "
-              nil nil "*anything zsh screen*")))
+    (anything-other-buffer sources "*anything zsh screen*")))
 
 (defun azs-want-zsh-expander (target)
   (string-match "{" target))
